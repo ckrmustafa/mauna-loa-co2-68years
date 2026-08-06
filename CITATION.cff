@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Mauna Loa CO2 1958-2026: Unified analysis of trend regimes, seasonal cycle evolution and forecasting (R Shiny application and data)"
+authors:
+  - family-names: "Çakır"
+    given-names: "Mustafa"
+    orcid: "https://orcid.org/0000-0002-1794-9242"
+    affiliation: "Iskenderun Technical University"
+version: 1.0.0
+date-released: 2026-08-07
+license: MIT
