@@ -19,6 +19,6 @@ All figures can be downloaded from within the app as 600 DPI PNG files.
 
 ## Citation
 
-Cakir, M. (2026). Mauna Loa CO2 1958-2026 companion Shiny application (v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.XXXXXXX
+Cakir, M. (2026). Mauna Loa CO2 1958-2026 companion Shiny application (v1.0.0). Zenodo. https://doi.org/10.5281/zenodo.21829988
 
 Data: Lan, X., Petron, G., Baugh, K., et al. (2025). Atmospheric Carbon Dioxide Dry Air Mole Fractions from the NOAA GML Global Greenhouse Gas Reference Network, Version 2025-08-15. https://doi.org/10.15138/wkgj-f215
