@@ -1,6 +1,6 @@
 # The Pulse and the Acceleration: Mauna Loa CO2 Record (1958-2026) - Companion R Shiny Application
 
-Single-file R Shiny application reproducing every figure and table of the companion paper: a unified 68-year analysis of trend regimes (PELT changepoint detection on the year-over-year growth rate), seasonal cycle evolution (harmonic model and STL decomposition) and out-of-sample forecasting (SARIMA, harmonic, XGB-hybrid, ensemble, seasonal naive) of the NOAA GML Mauna Loa monthly COb record, March 1958 to July 2026 (821 monthly means).
+Single-file R Shiny application reproducing every figure and table of the companion paper: a unified 68-year analysis of trend regimes (PELT changepoint detection on the year-over-year growth rate), seasonal cycle evolution (harmonic model and STL decomposition) and out-of-sample forecasting (SARIMA, harmonic, XGB-hybrid, ensemble, seasonal naive) of the NOAA GML Mauna Loa monthly CO2 record, March 1958 to July 2026 (821 monthly means).
 
 ## Contents
 
