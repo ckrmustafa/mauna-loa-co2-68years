@@ -4,7 +4,8 @@
 # Journal-ready figures: no in-figure titles
 # Tabs: Trend Regimes | Projection | Backtest | Seasonal Amplitude | Data | About
 # Requires: shiny, readxl, dplyr, tidyr, ggplot2, forecast,
-#           xgboost, lubridate, patchwork, zoo, changepoint
+#           xgboost, lubridate, patchwork, zoo, changepoint,
+#           sandwich, lmtest
 # ================================================================
 library(shiny)
 library(readxl)
@@ -17,6 +18,8 @@ library(lubridate)
 library(patchwork)
 library(zoo)
 library(changepoint)
+library(sandwich)
+library(lmtest)
 
 # ---------------- 1. DATA ----------------
 load_data <- function(path = "NOAA_Mauna_Loa_Aylik_CO2_1958_2026.xlsx") {
@@ -148,6 +151,10 @@ ui <- fluidPage(
       sliderInput("amp_window", "Amplitude moving average (years):",
                   min = 1, max = 10, value = 5, step = 1, sep = ""),
       hr(),
+      selectInput("bt_window", "Backtest window:",
+                  choices = c("Last 120 months (dynamic)" = "last120",
+                              "Fixed 2015-2024 window" = "w2015")),
+      hr(),
       downloadButton("dl_regimes", "Regime plot (600 DPI)"),
       br(), br(),
       downloadButton("dl_projection", "Projection plot (600 DPI)"),
@@ -155,6 +162,10 @@ ui <- fluidPage(
       downloadButton("dl_backtest", "Backtest plot (600 DPI)"),
       br(), br(),
       downloadButton("dl_amplitude", "Amplitude plot (600 DPI)"),
+      br(), br(),
+      downloadButton("dl_phase", "Phase plot (600 DPI)"),
+      br(), br(),
+      downloadButton("dl_summary", "Amplitude + phase summary (TXT)"),
       br(), br(),
       downloadButton("dl_metrics", "Backtest metrics (CSV)")
     ),
@@ -168,15 +179,17 @@ ui <- fluidPage(
                  br(),
                  textOutput("proj_info"),
                  plotOutput("proj_plot", height = "620px")),
-        tabPanel("Backtest (last 120 months)",
+        tabPanel("Backtest (120-month windows)",
                  br(),
                  textOutput("bt_info"),
                  plotOutput("bt_plot", height = "720px"),
                  tableOutput("bt_table")),
-        tabPanel("Seasonal Amplitude",
+        tabPanel("Seasonal Amplitude and Phase",
                  br(),
                  textOutput("amp_info"),
-                 plotOutput("amp_plot", height = "720px")),
+                 plotOutput("amp_plot", height = "980px"),
+                 br(),
+                 textOutput("phase_info")),
         tabPanel("Data",
                  tableOutput("data_table")),
         tabPanel("About",
@@ -194,7 +207,7 @@ ui <- fluidPage(
                    p("NOAA GML data are freely available for scientific research; please cite NOAA GML / SIO as the data source when using this app or its outputs."),
                    hr(),
                    h4("About this app"),
-                   p("Interactive supplement to an academic study of the Mauna Loa CO\u2082 record: PELT changepoint segmentation of trend regimes, seasonal cycle evolution, comparative forecasting (SARIMA, harmonic regression, XGBoost-hybrid, ensemble, seasonal-naive baseline) and out-of-sample backtesting over the last 120 months. All figures can be downloaded as journal-ready 600 DPI PNG files via the buttons in the sidebar.")
+                   p("Interactive supplement to an academic study of the Mauna Loa CO\u2082 record: PELT changepoint segmentation of trend regimes, seasonal cycle evolution (amplitude and phase), comparative forecasting (SARIMA, harmonic regression, XGBoost-hybrid, ensemble, seasonal-naive baseline) and out-of-sample backtesting over the last 120 months. All figures can be downloaded as journal-ready 600 DPI PNG files via the buttons in the sidebar.")
                  ))
       )
     )
@@ -256,11 +269,18 @@ server <- function(input, output, session) {
   
   # ---- Backtest (dynamic: last 120 months) ----
   bt <- reactive({
-    df       <- dat()
-    last     <- max(df$date)
-    te_start <- last %m-% months(119)
-    tr <- df %>% filter(date < te_start)
-    te <- df %>% filter(date >= te_start)
+    df <- dat()
+    if (identical(input$bt_window, "w2015")) {
+      te_start <- as.Date("2015-01-01")
+      te_end   <- as.Date("2024-12-01")
+      tr <- df %>% filter(date < te_start)
+      te <- df %>% filter(date >= te_start, date <= te_end)
+    } else {
+      last     <- max(df$date)
+      te_start <- last %m-% months(119)
+      tr <- df %>% filter(date < te_start)
+      te <- df %>% filter(date >= te_start)
+    }
     models <- fit_models(tr)
     fut    <- data.frame(date = te$date, year = te$year, month = te$month)
     fc     <- forecast_models(models, tr, nrow(te), fut)
@@ -298,15 +318,22 @@ server <- function(input, output, session) {
   })
   output$bt_info <- renderText({
     b <- bt()
-    paste0("Out-of-sample backtest over the last 120 months (",
+    wlab <- if (identical(input$bt_window, "w2015")) "fixed 2015-2024 sensitivity window"
+            else "last 120 months"
+    paste0("Out-of-sample backtest over the ", wlab, " (",
            format(b$start, "%b %Y"), " \u2013 ", format(b$end, "%b %Y"),
            "). Grey line: observed values; models trained on all data before the test window. Lower panel: forecast minus observed; shaded band = \u00B11 ppm.")
   })
-  output$amp_info <- renderText({
+  amp_info_txt <- reactive({
+    st <- amp_stats()
     paste0("STL decomposition with a time-varying seasonal window (s.window = 13, robust). ",
-           "Upper panel: seasonal component. Lower panel: annual peak-to-trough amplitude with ",
-           input$amp_window, "-year moving average (teal) and linear trend (red dashed).")
+           "Upper panel: seasonal component. Middle panel: annual peak-to-trough amplitude with ",
+           input$amp_window, "-year moving average (teal) and linear trend (red dashed). ",
+           sprintf("Amplitude trend: %+.3f ppm/decade (Newey-West lag-3 p = %.1e; largest p over lags 1-6: %.1e; slope without the first/last two complete years: %+.3f ppm/decade; slope excluding the 2022-2023 Maunakea relocation years: %+.3f ppm/decade, Newey-West lag-3 p = %.1e). ",
+                   st$slope, st$p_nw, st$p_max, st$slope_trim, st$slope_excl, st$p_excl),
+           "Lower panel: seasonal peak and trough timing, refined by parabolic interpolation.")
   })
+  output$amp_info <- renderText({ amp_info_txt() })
   
   # ---- Event bands helper ----
   add_event_bands <- function(p, date_min, date_max) {
@@ -522,12 +549,107 @@ server <- function(input, output, session) {
     
     p_stl / p_amp + plot_layout(heights = c(1, 1.2))
   })
+
+  # ---- Amplitude robustness (bandwidth scan + endpoint trim) ----
+  amp_stats <- reactive({
+    df  <- dat()
+    yts <- ts(df$co2, start = c(df$year[1], df$month[1]), frequency = 12)
+    s   <- stl(yts, s.window = 13, robust = TRUE)
+    amp <- data.frame(year = df$year,
+                      seasonal = as.numeric(s$time.series[, "seasonal"])) %>%
+      group_by(year) %>%
+      summarise(amplitude = max(seasonal) - min(seasonal), n = n(),
+                .groups = "drop") %>%
+      filter(n == 12)
+    fit   <- lm(amplitude ~ year, data = amp)
+    slope <- unname(coef(fit)[2] * 10)
+    p_nw  <- coeftest(fit, vcov. = NeweyWest(fit, lag = 3, prewhite = FALSE))[2, 4]
+    rng   <- sapply(1:6, function(L)
+      coeftest(fit, vcov. = NeweyWest(fit, lag = L, prewhite = FALSE))[2, 4])
+    amp_trim   <- amp %>% filter(year > min(year) + 1, year < max(year) - 1)
+    slope_trim <- unname(coef(lm(amplitude ~ year, data = amp_trim))[2] * 10)
+    amp_excl   <- amp %>% filter(!year %in% c(2022, 2023))
+    fit_excl   <- lm(amplitude ~ year, data = amp_excl)
+    slope_excl <- unname(coef(fit_excl)[2] * 10)
+    p_excl     <- coeftest(fit_excl, vcov. = NeweyWest(fit_excl, lag = 3, prewhite = FALSE))[2, 4]
+    list(slope = slope, p_nw = p_nw, p_max = max(rng), slope_trim = slope_trim,
+         slope_excl = slope_excl, p_excl = p_excl)
+  })
+
+  # ---- Phase object (peak and trough timing, sub-monthly) ----
+  phase_timing <- function(s, type = c("max", "min")) {
+    type <- match.arg(type)
+    k <- if (type == "max") which.max(s) else which.min(s)
+    frac <- 0
+    if (k > 1 && k < length(s)) {
+      y0 <- s[k - 1]; y1 <- s[k]; y2 <- s[k + 1]
+      denom <- y0 - 2 * y1 + y2
+      if (abs(denom) > 1e-12) frac <- 0.5 * (y0 - y2) / denom
+      frac <- max(-1, min(1, frac))
+    }
+    (k - 1 + frac) * 365.25 / 12   # day-of-year equivalent
+  }
+
+  phase_obj <- reactive({
+    df  <- dat()
+    yts <- ts(df$co2, start = c(df$year[1], df$month[1]), frequency = 12)
+    s   <- stl(yts, s.window = 13, robust = TRUE)
+    d2  <- data.frame(date = df$date, year = df$year,
+                      seasonal = as.numeric(s$time.series[, "seasonal"]))
+    ph <- d2 %>%
+      group_by(year) %>%
+      filter(n() == 12) %>%
+      summarise(peak   = phase_timing(seasonal, "max"),
+                trough = phase_timing(seasonal, "min"),
+                .groups = "drop")
+    tc     <- (ph$year - mean(ph$year)) / 10
+    fit_pk <- lm(peak ~ tc, data = ph)
+    fit_tr <- lm(trough ~ tc, data = ph)
+    nw_pk  <- coeftest(fit_pk, vcov. = NeweyWest(fit_pk, lag = 3, prewhite = FALSE))
+    nw_tr  <- coeftest(fit_tr, vcov. = NeweyWest(fit_tr, lag = 3, prewhite = FALSE))
+    rng_pk <- sapply(1:12, function(L)
+      coeftest(fit_pk, vcov. = NeweyWest(fit_pk, lag = L, prewhite = FALSE))[2, 4])
+    se_pk <- sqrt(diag(NeweyWest(fit_pk, lag = 3, prewhite = FALSE)))[2]
+    mde   <- (qnorm(0.975) + qnorm(0.80)) * se_pk
+    long <- ph %>%
+      select(year, peak, trough) %>%
+      pivot_longer(-year, names_to = "Extremum", values_to = "doy")
+    p_ph <- ggplot(long, aes(year, doy, color = Extremum)) +
+      geom_point(size = 1.2) +
+      geom_smooth(method = "lm", se = FALSE, linetype = "dashed", linewidth = 0.7) +
+      scale_color_manual(values = c(peak = "#d62728", trough = "#1f77b4"),
+                         labels = c(peak = "Seasonal peak", trough = "Seasonal trough")) +
+      annotate("text", x = min(ph$year) + 1,
+               y = (min(long$doy) + max(long$doy)) / 2,
+               label = sprintf("Peak drift: %+.2f days/decade (NW lag-3 p = %.2f)",
+                               coef(fit_pk)[2], nw_pk[2, 4]),
+               hjust = 0, size = 4, color = "#d62728") +
+      labs(x = NULL, y = "Timing (day of year)") +
+      theme_minimal(base_size = 13) +
+      theme(legend.position = "top", legend.title = element_blank())
+    stats_txt <- paste0(
+      "Phase analysis (STL s.window = 13, robust; extremum timing refined by parabolic ",
+      "interpolation on a day-of-year scale). ",
+      sprintf("Seasonal peak drift: %+.2f days/decade, Newey-West (lag 3) p = %.3f; ",
+              coef(fit_pk)[2], nw_pk[2, 4]),
+      sprintf("the p-value across lags 1-12 ranges from %.3f to %.3f. ",
+              min(rng_pk), max(rng_pk)),
+      sprintf("Seasonal trough drift: %+.2f days/decade, Newey-West (lag 3) p = %.4f. ",
+              coef(fit_tr)[2], nw_tr[2, 4]),
+      sprintf("The fit carries roughly 80%% power against a peak drift of %.1f days/decade ",
+              mde),
+      "or more (two-sided 5% test on the Newey-West standard error).")
+    list(plot = p_ph, stats = stats_txt)
+  })
   
   # ---------------- 5. OUTPUTS ----------------
   output$reg_plot  <- renderPlot({ regime_obj() })
   output$proj_plot <- renderPlot({ projection_obj()$plot })
   output$bt_plot   <- renderPlot({ backtest_obj() })
-  output$amp_plot  <- renderPlot({ amplitude_obj() })
+  output$amp_plot  <- renderPlot({
+    wrap_plots(amplitude_obj(), phase_obj()$plot, ncol = 1, heights = c(2.2, 1))
+  })
+  output$phase_info <- renderText({ phase_obj()$stats })
   output$bt_table  <- renderTable({ bt_metrics() }, digits = 3)
   output$data_table <- renderTable({
     dat() %>% select(date, year, month, co2) %>% tail(24)
@@ -548,7 +670,7 @@ server <- function(input, output, session) {
     }
   )
   output$dl_backtest <- downloadHandler(
-    filename = function() "CO2_backtest_last120months_600dpi.png",
+    filename = function() paste0("CO2_backtest_", input$bt_window, "_600dpi.png"),
     content  = function(file) {
       ggsave(file, plot = backtest_obj(),
              width = 10, height = 7, dpi = 600)
@@ -561,8 +683,25 @@ server <- function(input, output, session) {
              width = 10, height = 7, dpi = 600)
     }
   )
+  output$dl_summary <- downloadHandler(
+    filename = function() "CO2_seasonal_analysis_summary.txt",
+    content  = function(file) {
+      writeLines(c("AMPLITUDE ANALYSIS (Mauna Loa CO2, STL s.window = 13, robust)",
+                   "", amp_info_txt(), "",
+                   "PHASE ANALYSIS",
+                   "", phase_obj()$stats),
+                 con = file, useBytes = TRUE)
+    }
+  )
+  output$dl_phase <- downloadHandler(
+    filename = function() "CO2_phase_timing_600dpi.png",
+    content  = function(file) {
+      ggsave(file, plot = phase_obj()$plot,
+             width = 10, height = 4, dpi = 600)
+    }
+  )
   output$dl_metrics <- downloadHandler(
-    filename = function() "CO2_backtest_metrics.csv",
+    filename = function() paste0("CO2_backtest_metrics_", input$bt_window, ".csv"),
     content  = function(file) write.csv(bt_metrics(), file, row.names = FALSE)
   )
 }

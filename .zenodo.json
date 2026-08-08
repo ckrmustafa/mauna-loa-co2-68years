@@ -1,0 +1,37 @@
+{
+  "title": "Mauna Loa CO2 1958-2026: Unified analysis of trend regimes, seasonal cycle evolution and forecasting (R Shiny application and data)",
+  "description": "Single-file R Shiny application reproducing every figure and table of the companion paper: PELT changepoint segmentation of trend regimes, seasonal cycle evolution (STL-based amplitude and phase analysis with Newey-West inference), comparative forecasting (SARIMA, harmonic, XGB-hybrid, ensemble, seasonal naive) and 120-month out-of-sample backtesting of the NOAA GML Mauna Loa monthly CO2 record, March 1958 to July 2026. The bundled xlsx reproduces the NOAA GML trends file co2_mm_mlo.txt as downloaded on 6 August 2026 (snapshot last updated 5 August 2026; July 2026, 429.12 ppm, is the most recent month).",
+  "creators": [
+    {
+      "name": "Çakır, Mustafa",
+      "affiliation": "Iskenderun Technical University",
+      "orcid": "0000-0002-1794-9242"
+    },
+    {
+      "name": "Ural, Gizem Nazlı",
+      "affiliation": "Akdeniz University"
+    },
+    {
+      "name": "Yılmaz, Mesut",
+      "affiliation": "Akdeniz University",
+      "orcid": "0000-0001-8799-3452"
+    },
+    {
+      "name": "Oral, Okan",
+      "affiliation": "Akdeniz University",
+      "orcid": "0000-0002-6302-4574"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "Mauna Loa",
+    "atmospheric CO2",
+    "changepoint detection",
+    "PELT",
+    "seasonal cycle",
+    "SARIMA",
+    "XGBoost",
+    "R Shiny"
+  ],
+  "upload_type": "software"
+}

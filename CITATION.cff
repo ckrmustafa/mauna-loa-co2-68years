@@ -7,6 +7,17 @@ authors:
     given-names: "Mustafa"
     orcid: "https://orcid.org/0000-0002-1794-9242"
     affiliation: "Iskenderun Technical University"
-version: 1.0.0
+  - family-names: "Ural"
+    given-names: "Gizem Nazlı"
+    affiliation: "Akdeniz University"
+  - family-names: "Yılmaz"
+    given-names: "Mesut"
+    orcid: "https://orcid.org/0000-0001-8799-3452"
+    affiliation: "Akdeniz University"
+  - family-names: "Oral"
+    given-names: "Okan"
+    orcid: "https://orcid.org/0000-0002-6302-4574"
+    affiliation: "Akdeniz University"
+version: 1.0.3
 date-released: 2026-08-07
 license: MIT
